@@ -1,26 +1,61 @@
 mod maze;
 
-use maze::{Maze, Cell};
-use std::path::{PathBuf};
+use maze::{Maze, Color};
+use std::convert::TryInto;
+use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use png::Encoder;
-
+use clap::{App, Arg};
 
 fn main() {
-  let m = Maze::prim_random(99, 99);
-  let mut filen = PathBuf::new();
-  filen.push("image");
 
-  write_maze_image(&mut filen, &m.end, &m.grid);
+  let matches = App::new("Maze generator")
+                              .version("0.1.0")
+                              .author("Computer Science Student")
+                              .about("Generates mazes in png format")
+                              .arg(Arg::with_name("filename")
+                                    .short("f")
+                                    .long("file")
+                                    .value_name("FILE")
+                                    .help("Output png with this filename")
+                                    .takes_value(true)
+                                    .default_value("maze"))
+                              .arg(Arg::with_name("width")
+                                    .short("w")
+                                    .long("width")
+                                    .value_name("INT")
+                                    .help("Number of horizontal cells")
+                                    .takes_value(true)
+                                    .default_value("201"))
+                              .arg(Arg::with_name("height")
+                                    .short("h")
+                                    .long("height")
+                                    .value_name("INT")
+                                    .help("Number of vertical cells")
+                                    .takes_value(true)
+                                    .default_value("201"))
+                              .get_matches();
+  let width = matches.value_of("width").unwrap().parse::<u32>().unwrap();
+  let height = matches.value_of("height").unwrap().parse::<u32>().unwrap();
+
+  if width > 1000 || height > 1000 {
+    panic!("Dimensions too large")
+  }
+
+  let file = matches.value_of("filename").unwrap();
+  
+  let m = Maze::prim_random((width-2).try_into().unwrap(), (height-2).try_into().unwrap());
+
+  write_maze_image("maze.png", &m.to_bitmap(false), width, height);
+  write_maze_image("maze_solved.png", &m.to_bitmap(true), width, height);
 }
 
-fn write_maze_image(filename: &mut PathBuf, end: &Cell, maze: &Vec<Vec<bool>>) {
-  filename.set_extension("png");
-  let file = File::create(filename.as_path()).unwrap();
+fn write_maze_image(filename: &str, maze: &Vec<Color>, width: u32, height: u32) {
+  let file = File::create(Path::new(filename)).unwrap();
   let ref mut w = BufWriter::new(file);
 
-  let mut encoder = Encoder::new(w, 101, 101);
+  let mut encoder = Encoder::new(w, width, height);
   encoder.set_color(png::ColorType::Rgb);
   encoder.set_depth(png::BitDepth::Eight);
   encoder.set_trns(vec!(0xFFu8, 0xFFu8, 0xFFu8));
@@ -36,36 +71,10 @@ fn write_maze_image(filename: &mut PathBuf, end: &Cell, maze: &Vec<Vec<bool>>) {
   let mut writer = encoder.write_header().unwrap();
   let mut data: Vec<u8> = Vec::new();
 
-  for _ in 0..maze[0].len() + 2 {
-    data.push(0);
-    data.push(0);
-    data.push(0);
-  }
-
-  for row in maze {
-    data.push(0);
-    data.push(0);
-    data.push(0);
-    for c in row {
-      if *c {
-        data.push(255);
-        data.push(255);
-        data.push(255);
-      } else {
-        data.push(0);
-        data.push(0);
-        data.push(0);
-      }
-    }
-    data.push(0);
-    data.push(0);
-    data.push(0);
-  }
-
-  for _ in 0..maze[0].len() + 2 {
-    data.push(0);
-    data.push(0);
-    data.push(0);
+  for Color(r, g, b) in maze {
+    data.push(*r);
+    data.push(*g);
+    data.push(*b);
   }
 
   writer.write_image_data(data.as_slice()).unwrap();
